@@ -1,14 +1,19 @@
+from typing import Optional, List
 from fastapi import FastAPI, Response, status, HTTPException, Depends
 from fastapi.params import Body
 from pydantic import BaseModel
+from passlib.context import CryptContext #Remove this line
 from random import randrange
 import time
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from sqlalchemy.orm import Session
 from . import models
-from .schemas import Post
+from .schemas import PostBase, PostCreate, PostResponse, UserCreate,UserResponse
 from .database import engine, get_db
+from .utils import hashing_password
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") #Remove also
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -26,58 +31,33 @@ while True:
         time.sleep(2)
 
 
-myposts = [{"id":1, "title":"Title for post 1", "content":"Content of post 1"},
-           {"id":2, "title":"Favorite food", "content":"That's pizza!"}]
-
-
-def findpost(id):
-    for post in myposts:
-        if post["id"] == id:
-            return post
-
-def find_post_index(id):
-    for i, p in enumerate(myposts):
-        if p["id"] == int(id):
-            return i
-
-
-@app.get("/posts/{id}")
+# -------------- POSTS
+@app.get("/posts/{id}", response_model=PostResponse)
 def get_post(id:int, db:Session=Depends(get_db)):
-    #cursor.execute("""SELECT * FROM posts WHERE id=%s;""", (str(id),))
-    #post = cursor.fetchone()
     post = db.query(models.Post).filter(models.Post.id==id).first()
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f"Post with id '{id}' was not found!")
     else:
-        return {"message": post}
+        return post
 
 
-@app.get("/posts")
+@app.get("/posts", response_model=List[PostResponse])
 def get_posts(db:Session=Depends(get_db)):
-    #cursor.execute("""SELECT * from posts;""")
-    #posts = cursor.fetchall()
-    #return {"data": posts}
     posts = db.query(models.Post).all()
-    return {"status":posts}
+    return posts
     
 
-@app.post("/posts", status_code=status.HTTP_201_CREATED)
-def create_posts(post:Post,db:Session=Depends(get_db)): #here----
-    #cursor.execute("""INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING *;""", (post.title, post.content, post.published,))
-    #new_post = cursor.fetchone()
-    #conn.commit()
+@app.post("/posts", status_code=status.HTTP_201_CREATED, response_model=PostResponse)
+def create_posts(post:PostCreate,db:Session=Depends(get_db)):
     new_post = models.Post(**post.model_dump())
     db.add(new_post)
     db.commit()
     db.refresh(new_post)
-    return {"data":new_post}
+    return new_post
 
 
 @app.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_post(id,db:Session=Depends(get_db)):
-    #cursor.execute("""DELETE FROM posts WHERE id=%s RETURNING *; """,(str(id),))
-    #deleted_post = cursor.fetchone()
-    #conn.commit()
     post = db.query(models.Post).filter(models.Post.id==id)
 
     if post.first() == None:
@@ -87,17 +67,47 @@ def delete_post(id,db:Session=Depends(get_db)):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@app.put("/posts/{id}", status_code=status.HTTP_200_OK)
-def update_post(id:int, post:Post,db:Session=Depends(get_db)):
-    #cursor.execute("""UPDATE posts SET title=%s, content=%s WHERE id=%s RETURNING *; """, (post.title, post.content,str(id),))
-    #updated_post = cursor.fetchone()
-    #conn.commit()
+@app.put("/posts/{id}", status_code=status.HTTP_200_OK, response_model=PostResponse)
+def update_post(id:int, post:PostCreate,db:Session=Depends(get_db)):
     post_query = db.query(models.Post).filter(models.Post.id==id)
     updated_post = post_query.first()
     if updated_post == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"'id' {id} was not found.")
     post_query.update(post.model_dump(), synchronize_session=False)
     db.commit()
-    return {"message":f"Post {id} was updated succesfully!"}
+    return post_query.first()
         
 
+# -------------- USERS
+@app.get("/users")
+def get_users(db:Session=Depends(get_db)):
+    users = db.query(models.User).all()
+    return users
+
+@app.post("/users", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
+def create_user(user:UserCreate,db:Session=Depends(get_db)):
+    user.password = hashing_password(user.password)
+    new_user = models.User(**user.model_dump())
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+@app.get("/users/{id}", response_model=UserResponse)
+def get_user(id:int, db:Session=Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id==id).first()
+    
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User with id '{id}' not found!")
+    return user
+
+
+@app.delete("/users/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_post(id,db:Session=Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id==id)
+
+    if user.first() == None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"'id' {id} was not found.")
+    user.delete(synchronize_session=False)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
