@@ -1,0 +1,14 @@
+
+
+To activate the venv, run on terminal:
+  venv\Scripts\Activate.ps1
+
+
+To run the local server, run:
+  uvicorn app.main:app --reload
+
+Notes:
+  app = folder
+  main = python file
+  app = app's name
+

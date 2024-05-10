@@ -6,18 +6,32 @@ class PostBase(BaseModel):
     "This is the schema that defines the post model"
     title: str
     content: str
-    published: bool = False
+    published: bool = True
 
 class PostCreate(PostBase):
     pass
 
-class PostResponse(BaseModel): #Cambié PostCreate a BaseModel, no he probado
-    "Fields 'title', 'content', and 'published' are inherited from PostBase class above."
+class Post(PostBase):
     id: int
     created_at: datetime
+    owner_id: int
+    # owner : UserOut
     
     class Config:
         from_attributes = True
+    
+    
+#class PostOut(BaseModel):
+#    Post: Post
+#    votes: int
+
+#class PostResponse(PostBase): #Cambié PostCreate a BaseModel, no he probado
+#    "Fields 'title', 'content', and 'published' are inherited from PostBase class above."
+#    id: int
+#    created_at: datetime
+       
+#    class Config:
+#        from_attributes = True
         
 
 # ------------- USERS
@@ -41,10 +55,10 @@ class UserLogin(BaseModel):
     
     
 class Token(BaseModel):
-    access_token = str
-    token_type = str
+    access_token: str
+    token_type: str
     
     
 class TokenData(BaseModel):
-    id = Optional[str]=None
+    id: Optional[str]=None
     
